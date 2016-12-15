@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>
  * When using the second constructor
- * {@link #ElasticsearchSink(java.util.Map, java.util.List, ElasticsearchSinkFunction)} a {@link TransportClient} will
+ * {@link #ElasticsearchSink(java.util.Map, java.util.Map, java.util.List, ElasticsearchSinkFunction)} a {@link TransportClient} will
  * be used.
  *
  * <p>
@@ -79,7 +79,7 @@ public class ElasticsearchSink<T> extends RichSinkFunction<T>  {
   /**
    * The user specified config map that we forward to Elasticsearch when we create the Client.
    */
-  private final Map<String, String> userConfig;
+  private final Map<String, String> transportClientConfig, bulkProcessorConfig;
 
   /**
    * The list of nodes that the TransportClient should connect to. This is null if we are using
@@ -120,13 +120,15 @@ public class ElasticsearchSink<T> extends RichSinkFunction<T>  {
   /**
    * Creates a new ElasticsearchSink that connects to the cluster using a TransportClient.
    *
-   * @param userConfig The map of user settings that are passed when constructing the TransportClient and BulkProcessor
+   * @param transportClientConfig The map of user settings that are passed when constructing the TransportClient
+   * @param bulkProcessorConfig The map of user settings that are passed when constructing the BulkProcessor
    * @param transportAddresses The Elasticsearch Nodes to which to connect using a {@code TransportClient}
    * @param elasticsearchSinkFunction This is used to generate the ActionRequest from the incoming element
    *
    */
-  public ElasticsearchSink(Map<String, String> userConfig, List<InetSocketAddress> transportAddresses, ElasticsearchSinkFunction<T> elasticsearchSinkFunction) {
-    this.userConfig = userConfig;
+  public ElasticsearchSink(Map<String, String> transportClientConfig, Map<String, String> bulkProcessorConfig, List<InetSocketAddress> transportAddresses, ElasticsearchSinkFunction<T> elasticsearchSinkFunction) {
+    this.transportClientConfig = transportClientConfig;
+    this.bulkProcessorConfig = bulkProcessorConfig;
     this.elasticsearchSinkFunction = elasticsearchSinkFunction;
     Preconditions.checkArgument(transportAddresses != null && transportAddresses.size() > 0);
     this.transportAddresses = transportAddresses;
@@ -145,7 +147,7 @@ public class ElasticsearchSink<T> extends RichSinkFunction<T>  {
     }
 
     //Settings settings = Settings.settingsBuilder().put(userConfig).build();
-    Settings settings = Settings.builder().put(userConfig).build();
+    Settings settings = Settings.builder().put(transportClientConfig).build();
 
     //TransportClient transportClient = TransportClient.builder().settings(settings).build();
     TransportClient transportClient = new PreBuiltTransportClient(settings);
@@ -168,7 +170,6 @@ public class ElasticsearchSink<T> extends RichSinkFunction<T>  {
     BulkProcessor.Builder bulkProcessorBuilder = BulkProcessor.builder(client, new BulkProcessor.Listener() {
       @Override
       public void beforeBulk(long executionId, BulkRequest request) {
-
       }
 
       @Override
@@ -195,7 +196,7 @@ public class ElasticsearchSink<T> extends RichSinkFunction<T>  {
     // This makes flush() blocking
     bulkProcessorBuilder.setConcurrentRequests(0);
 
-    ParameterTool params = ParameterTool.fromMap(userConfig);
+    ParameterTool params = ParameterTool.fromMap(bulkProcessorConfig);
 
     if (params.has(CONFIG_KEY_BULK_FLUSH_MAX_ACTIONS)) {
       bulkProcessorBuilder.setBulkActions(params.getInt(CONFIG_KEY_BULK_FLUSH_MAX_ACTIONS));
